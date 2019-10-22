@@ -3,22 +3,41 @@ import numpy as np
 from scipy import stats
 
 class Samples:
-    """Short summary.
+    """Class for samples. Contains methods to calculate:
+    1) MAP, i.e. the the maximum probability sample
+    2) average 1D marginalised samples, either:
+        i) median
+        ii) mode estimtaed by fitting beta distribution
+        iii) mode estimtaed as the "halfsample mode"
+    3) Bayesian Credible Intervals (BCIs) - i.e. intervals that contain/exclude
+    a specified fraction of samples, either:
+        i) even-tailed interval
+        ii) highest-density interval
+    4)
+
 
     Parameters
     ----------
-    x : float array (n_samples, n_features)
-        samples
+    x : array of (n_smp, smp_shape)
+        sample values
+    logprob : array (n_smp,)
+        log proabability values
+
     """
 
-    def __init__(self, x=None):
+    def __init__(self, x=None, logprob=None):
         self.x = x
         self.n_smp = x.shape[0]
         self.smp_shape = x.shape[1::]
         self.smp_dim = len(self.smp_shape)
         self.sx = np.sort(x, axis=0)
+        self.logprob = logprob
 
     def check_p_in_p_out(self, p_in, p_out):
+        """Check p_in/p_out parameters for BCIs i.e. the fraction of samples
+        to include/exclude in the intervals.
+
+        """
         if (p_in is None) + (p_out is None) != 1:
             raise ValueError('Exactly one of p_in or p_out must be set')
         if p_in is None:
