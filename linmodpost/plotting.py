@@ -10,10 +10,9 @@ from . samplers import Samples
 # set the colormap and centre the colorbar
 class MidpointNormalize(colors.Normalize):
 	"""
-	Normalise the colorbar so that diverging bars work there way either side from a prescribed midpoint value)
-
-	e.g. im=ax1.imshow(array, norm=MidpointNormalize(midpoint=0.,vmin=-100, vmax=100))
-
+	Normalise the colorbar so that diverging bars work there way either side
+    from a prescribed midpoint value) e.g.
+    im=ax1.imshow(array, norm=MidpointNormalize(midpoint=0.,vmin=-10, vmax=10))
     taken from e.g. https://github.com/matplotlib/matplotlib/issues/14892
 	"""
 	def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
