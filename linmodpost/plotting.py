@@ -52,8 +52,7 @@ class Plotter:
             self.get_bcis = 'highest_density_bcis'
         else:
             raise ValueError('Unknown credible_interval_type')
-        self.p_in = np.array(p_in_credible_intervals)
-        self.n_bcis = len(p_in_credible_intervals)
+        self.set_credible_interval_levels(p_in_credible_intervals)
         # set/update plot formatting keywords
         self.kw_mod_plot = {'cmap':plt.cm.viridis}
         self.kw_mod_plot.update(kw_mod_plot)
@@ -66,14 +65,19 @@ class Plotter:
         self.kw_post2d_plot={'cmap':plt.cm.cividis}
         self.kw_post2d_plot.update(kw_post2d_plot)
         # set aspect ratio for calls to imshow
-        self.configure_imshow(imshow_aspect=imshow_aspect)
         self.kw_resid_plot = self.kw_post2d_plot.copy()
         self.kw_resid_plot.update({'cmap':plt.cm.bwr,
                                    'norm':MidpointNormalize(midpoint=0)})
+        self.configure_imshow(imshow_aspect=imshow_aspect)
+
+    def set_credible_interval_levels(self, p_in_credible_intervals):
+        self.p_in = np.array(p_in_credible_intervals)
+        self.n_bcis = len(p_in_credible_intervals)
 
     def configure_imshow(self,
                          imshow_aspect='square_pixels',
                          interpolation='none'):
+        par_dims = self.modgrid.par_dims
         if imshow_aspect=='square_pixels':
             # aspect ratio for square pixels in imshow calls
             if self.modgrid is not None:
