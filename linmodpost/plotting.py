@@ -85,14 +85,29 @@ class Plotter:
                     plim = self.modgrid.par_lims
                     plim_rng = np.array(plim)[:,1] - np.array(plim)[:,0]
                     plim_ratio = 1.*plim_rng[1]/plim_rng[0]
-                    pdim_ratio = 1.*self.modgrid.par_dims[1]/self.modgrid.par_dims[0]
-                    aspect = plim_ratio / pdim_ratio
+                    pdim_ratio = 1.*par_dims[1]/par_dims[0]
+                    aspect = plim_ratio/pdim_ratio
                 elif self.modgrid.npars==1:
                     plim = self.modgrid.par_lims
                     plim_rng = plim[0][1] - plim[0][0]
                     plim_ratio = 1./plim_rng
-                    pdim_ratio = 1./self.modgrid.par_dims[0]
+                    pdim_ratio = 1./par_dims[0]
                     aspect = pdim_ratio/plim_ratio
+                else:
+                    pass
+        elif imshow_aspect=='square_axes':
+            # aspect ratio for square pixels in imshow calls
+            if self.modgrid is not None:
+                if self.modgrid.npars==2:
+                    plim = self.modgrid.par_lims
+                    plim_rng = np.array(plim)[:,1] - np.array(plim)[:,0]
+                    plim_ratio = 1.*plim_rng[1]/plim_rng[0]
+                    aspect = plim_ratio
+                elif self.modgrid.npars==1:
+                    plim = self.modgrid.par_lims
+                    plim_rng = plim[0][1] - plim[0][0]
+                    plim_ratio = 1./plim_rng
+                    aspect = plim_ratio
                 else:
                     pass
         elif imshow_aspect=='auto':
