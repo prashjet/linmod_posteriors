@@ -290,8 +290,9 @@ class Plotter:
                    plot_true=True,
                    plot_posterior=True,
                    posterior_view='median',
-                   df_colorscale='true',
+                   df_clim='joint_rng',
                    resid_type='significance',
+                   resid_clim='auto',
                    resid_nsmp_min=30):
         """Plot 2D distribution functions as images
 
@@ -306,18 +307,24 @@ class Plotter:
             1) median
             2) mode
             3) MAP
-        df_colorscale : string
+        df_clim : string, float, or array shape (2,). Options:
             when plotting true and posterior of the DF, scale colorbar to:
-            1) 'truth' i.e. min/max of the true distribution
-            2) 'posterior' i.e. min/max of the posterior_view
-            3) 'joint' i.e. joint min/max of the true/posterior_view
-        resid_type : string, one of:
+            1) 'true_rng' i.e. min/max of the true distribution
+            2) 'posterior_rng' i.e. min/max of the posterior_view
+            3) 'joint_rng' i.e. joint min/max of the true/posterior_view
+            4) float vlim, then clim=(-vlim, vlim)
+            5) array (vmin, vmax)
+        resid_type : string or float. Options:
             1) 'diff' raw differences between posterior view and truth
             2) 'RMSE_normed' - differences normalised by RMSE i.e. root mean
 			squared error (relative to central panel)
             3) 'MAD_normed' - differences normalised by MAD i.e. median absolute
 			deviation (relative to central panel)
             4) 'significance' - in gaussian sigma
+        resid_clim : string, float or array shape (2,). Options:
+            1) 'auto', i.e. symmetric, maximum = max(abs(residual))
+            2) float vlim, then clim=(-vlim, vlim)
+            3) array (vmin, vmax)
         resid_nsmp_min : int
             if resid_type='significance', this is minimum number of samples to
             consider when calculting significances (see Samples class)
@@ -349,16 +356,22 @@ class Plotter:
                 title = 'MAP model'
             else:
                 raise ValueError('Unknown posterior_view')
-        # get colorlims
-        if df_colorscale=='true':
+        # get df colorlims
+        if df_clim=='true_rng':
             vmin, vmax = np.min(self.df.F), np.max(self.df.F)
-        elif df_colorscale=='posterior':
+        elif df_clim=='posterior_rng':
             vmin, vmax = np.min(post_view), np.max(post_view)
-        elif df_colorscale=='joint':
+        elif df_clim=='joint_rng':
             vmin = np.min(np.concatenate((self.df.F.ravel(), post_view)))
             vmax = np.max(np.concatenate((self.df.F.ravel(), post_view)))
+        elif isinstance(df_clim, (float,int)):
+            vmin = -1.*df_clim
+            vmax = 1.*df_clim
+        elif isinstance(df_clim, (np.ndarray,list,tuple)):
+            vmin = df_clim[0]
+            vmax = df_clim[1]
         else:
-            raise ValueError('Unknown df_colorscale')
+            raise ValueError('Unknown df_clim')
         if (plot_true and plot_posterior):
             if resid_type=='diff':
                 resid_img = post_view - self.df.F.ravel()
@@ -384,6 +397,19 @@ class Plotter:
                 cbar_lab = 'significance [$\\sigma$]'
             else:
                 raise ValueError('Unknown resid_type')
+        # get df colorlims
+        if resid_clim=='auto':
+            vlim = np.max(np.abs(resid_img))
+            self.kw_resid_plot['norm'].vmin = -vlim
+            self.kw_resid_plot['norm'].vmax = vlim
+        elif isinstance(resid_clim, (float,int)):
+            self.kw_resid_plot['norm'].vmin = -1.0001*resid_clim
+            self.kw_resid_plot['norm'].vmax = 1.0001*resid_clim
+        elif isinstance(resid_clim, (np.ndarray,list,tuple)):
+            self.kw_resid_plot['norm'].vmin = 1.0001*resid_clim[0]
+            self.kw_resid_plot['norm'].vmax = 1.0001*resid_clim[1]
+        else:
+            raise ValueError('Unknown resid_clim')
         # plot images
         ax_cnt = 0
         if plot_true:
@@ -394,7 +420,7 @@ class Plotter:
                                      vmax=vmax)
             ax[ax_cnt].set_title('true')
             ax_cnt += 1
-        if plot_true:
+        if plot_posterior:
             post_view = self.modgrid.reshape_beta(post_view)
             imdf = ax[ax_cnt].imshow(post_view,
                                      **self.kw_post2d_plot,
@@ -435,12 +461,10 @@ class Plotter:
         cbdf = fig.colorbar(imdf, cax=cax_df, orientation='horizontal')
         cbdf.set_label('weights')
         if (plot_true and plot_posterior):
-            print(np.min(resid_img), np.max(resid_img))
             cbres = fig.colorbar(imres,
                                  cax=cax_resid,
                                  orientation='horizontal',
-                                 extend='both',
-                                 ticks=(-3, 0, 3))
+                                 extend='both')
             cbres.set_label(cbar_lab)
         return
 
