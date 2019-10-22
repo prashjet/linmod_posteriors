@@ -267,7 +267,7 @@ class Plotter:
                        self.df.F,
                        label='true',
                        **self.kw_true_plot)
-            beta_med = self.beta_smp.median()
+            beta_med = self.beta_smp.get_median()
             ax[1].plot(self.modgrid.par_cents[0],
                        self.df.F - beta_med,
                        '-k')
