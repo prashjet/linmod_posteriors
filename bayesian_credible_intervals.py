@@ -25,7 +25,6 @@ hd_bci = samples.highest_density_bcis(p_in=p_in)
 # plot results
 kw_hist = {'bins':50, 'histtype':'step', 'density':True}
 kw_text = {'size':20, 'va':'center', 'ha':'center'}
-
 fig, ax = plt.subplots(4, 2, figsize=(6, 8), sharex='col')
 ax = ax.T
 for i in range(4):
@@ -37,8 +36,8 @@ for i in range(4):
     for j in range(2):
         ax[j,i].get_yaxis().set_visible(False)
         ax[j,i].get_xaxis().set_visible(False)
-fig.text(0.25, 0.95, 'Equal Tailed', size=20, va='center', ha='center')
-fig.text(0.75, 0.95, 'Highest Density', size=20, va='center', ha='center')
+fig.text(0.25, 0.95, 'Equal Tailed', **kw_text)
+fig.text(0.75, 0.95, 'Highest Density', **kw_text)
 fig.tight_layout()
 fig.subplots_adjust(top=0.9)
 plt.savefig('../plots/bayesian_credible_intervals.png')
