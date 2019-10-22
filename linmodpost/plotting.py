@@ -33,60 +33,115 @@ class Plotter:
                  data=None,
                  beta_smp=None,
                  df=None,
-                 percentiles=np.array([5, 50]),
-                 col_data='C0',
-                 col_true='k',
-                 col_post='C1'):
-        # set values
+                 credible_interval_type='even_tailed',
+                 p_in_credible_intervals=np.array([0.5, 0.95]),
+                 imshow_aspect='square_pixels',
+                 kw_mod_plot={},
+                 kw_data_plot={},
+                 kw_true_plot={},
+                 kw_post1d_plot={},
+                 kw_post2d_plot={}):
+        # set input values
         self.modgrid = modgrid
-        if self.modgrid is not None:
-            if self.modgrid.npars==2:
-                plim = self.modgrid.par_lims
-                plim_rng = np.array(plim)[:,1] - np.array(plim)[:,0]
-                plim_ratio = 1.*plim_rng[1]/plim_rng[0]
-                pdim_ratio = 1.*self.modgrid.par_dims[1]/self.modgrid.par_dims[0]
-                aspect = plim_ratio / pdim_ratio
-            elif self.modgrid.npars==1:
-                plim = self.modgrid.par_lims
-                plim_rng = plim[0][1] - plim[0][0]
-                plim_ratio = 1./plim_rng
-                pdim_ratio = 1./self.modgrid.par_dims[0]
-                aspect = pdim_ratio/plim_ratio
-            else:
-                pass
-        self.imshow_aspect = aspect
         self.data = data
         self.beta_smp = beta_smp
         self.df = df
-        self.n_pc = len(percentiles)
-        self.pc = percentiles
-        self.pc_even_tailed = np.concatenate((percentiles/2.,
-                                              100-percentiles/2.))
+        # set bayesian credible interval parameters
+        if credible_interval_type=='even_tailed':
+            self.get_bcis = 'even_tailed_bcis'
+        elif credible_interval_type=='highest_density':
+            self.get_bcis = 'highest_density_bcis'
+        else:
+            raise ValueError('Unknown credible_interval_type')
+        self.p_in = np.array(p_in_credible_intervals)
+        self.n_bcis = len(p_in_credible_intervals)
+        # set/update plot formatting keywords
+        self.kw_mod_plot = {'cmap':plt.cm.viridis}
+        self.kw_mod_plot.update(kw_mod_plot)
+        self.kw_data_plot = {'color':'C0', 'marker':'.', 'ls':'None', 'ms':3}
+        self.kw_data_plot.update(kw_data_plot)
+        self.kw_true_plot = {'color':'k', 'ls':'-'}
+        self.kw_true_plot.update(kw_true_plot)
+        self.kw_post1d_plot = {'color':'C1', 'alpha':0.3}
+        self.kw_post1d_plot.update(kw_post1d_plot)
+        self.kw_post2d_plot={'cmap':plt.cm.cividis}
+        self.kw_post2d_plot.update(kw_post2d_plot)
+        # set aspect ratio for calls to imshow
+        self.configure_imshow(imshow_aspect=imshow_aspect)
+        self.kw_resid_plot = self.kw_post2d_plot.copy()
+        self.kw_resid_plot.update({'cmap':plt.cm.bwr,
+                                   'norm':MidpointNormalize(midpoint=0)})
 
-    def plot_modgrid(self, mod_cmap=plt.cm.viridis):
+    def configure_imshow(self,
+                         imshow_aspect='square_pixels',
+                         interpolation='none'):
+        if imshow_aspect=='square_pixels':
+            # aspect ratio for square pixels in imshow calls
+            if self.modgrid is not None:
+                if self.modgrid.npars==2:
+                    plim = self.modgrid.par_lims
+                    plim_rng = np.array(plim)[:,1] - np.array(plim)[:,0]
+                    plim_ratio = 1.*plim_rng[1]/plim_rng[0]
+                    pdim_ratio = 1.*self.modgrid.par_dims[1]/self.modgrid.par_dims[0]
+                    aspect = plim_ratio / pdim_ratio
+                elif self.modgrid.npars==1:
+                    plim = self.modgrid.par_lims
+                    plim_rng = plim[0][1] - plim[0][0]
+                    plim_ratio = 1./plim_rng
+                    pdim_ratio = 1./self.modgrid.par_dims[0]
+                    aspect = pdim_ratio/plim_ratio
+                else:
+                    pass
+        elif imshow_aspect=='auto':
+            # auto: fill the axes
+            aspect = 'auto'
+        elif isinstance(imshow_aspect, (int, float)):
+            aspect = float(imshow_aspect)
+        else:
+            raise ValueError('unknown imshow_aspect')
+        self.imshow_aspect = aspect
+        self.kw_post2d_plot.update({'aspect':aspect})
+        self.kw_mod_plot.update({'aspect':aspect})
+        self.kw_resid_plot.update({'aspect':aspect})
+        # set imshow extent
+        if self.modgrid.npars==1:
+            plim = self.modgrid.par_lims
+            extent = np.concatenate((plim[0], [0,1]))
+        elif self.modgrid.npars==2:
+            plim = self.modgrid.par_lims
+            extent = np.concatenate(plim[::-1])
+        else:
+            pass
+        self.kw_post2d_plot.update({'extent':extent})
+        self.kw_mod_plot.update({'extent':extent})
+        self.kw_resid_plot.update({'extent':extent})
+        # set interpolation
+        self.kw_post2d_plot.update({'interpolation':interpolation})
+        self.kw_mod_plot.update({'interpolation':interpolation})
+        self.kw_resid_plot.update({'interpolation':interpolation})
+        # set origin
+        self.kw_post2d_plot.update({'origin':'lower'})
+        self.kw_mod_plot.update({'origin':'lower'})
+        self.kw_resid_plot.update({'origin':'lower'})
+
+    def plot_modgrid(self):
         # get colors
         models = self.modgrid.X.T
         v = [np.array([self.modgrid.lmd, model]).T for model in models]
         cols = np.linspace(0, 1, self.modgrid.p)
+        if self.modgrid.npars==1:
+            mod_key_arr = np.array([cols])
+        elif self.modgrid.npars==2:
+            mod_key_arr = self.modgrid.reshape_beta(cols)
+        cmap = self.kw_mod_plot.pop('cmap')
         lc = LineCollection(np.array(v),
-                            colors=mod_cmap(cols))
+                            colors=cmap(cols))
+        self.kw_mod_plot.update({'cmap':cmap})
         fig, ax = plt.subplots(1, 2, figsize=(7, 3.5))
         # plot models
         ax[0].add_collection(lc)
-        if self.modgrid.npars==2:
-            mod_key_arr = self.modgrid.reshape_beta(cols)
-            plim = self.modgrid.par_lims
-            extent = np.concatenate(plim[::-1])
-        elif self.modgrid.npars==1:
-            mod_key_arr = np.array([cols])
-            plim = self.modgrid.par_lims
-            extent = np.concatenate((plim[0], [0,1]))
-        else:
-            raise ValueError('plot_modgrid assumes 1D or 2D model grid')
         ax[1].imshow(mod_key_arr,
-                     cmap=mod_cmap,
-                     extent=extent,
-                     aspect=self.imshow_aspect)
+                     **self.kw_mod_plot)
         # format ax0
         minx, maxx = np.min(self.modgrid.lmd), np.max(self.modgrid.lmd)
         miny, maxy = np.min(self.modgrid.X), np.max(self.modgrid.X)
@@ -106,13 +161,13 @@ class Plotter:
     def plot_data(self, plot_true_ybar=True):
         fig, ax = plt.subplots(1, 1, figsize=(7,3.5))
         # plot data
-        ax.plot(self.data.lmd, self.data.y, '.', ms=1, label='$y$')
+        ax.plot(self.data.lmd, self.data.y, label='$y$', **self.kw_data_plot)
         if plot_true_ybar:
             if hasattr(self.data, 'ybar'):
                 ax.plot(self.data.lmd,
                         self.data.ybar,
-                        '-k',
-                        label='true $\\bar{y}$')
+                        label='true $\\bar{y}$',
+                        **self.kw_true_plot)
         # format
         ax.legend()
         ax.set_ylabel('Data')
@@ -120,48 +175,49 @@ class Plotter:
         fig.tight_layout()
         fig.subplots_adjust(hspace=0)
 
+    def plot_dummy_model1d(self,
+                           ax=None,
+                           label='model',
+                           lw=6):
+        ax.plot([], [], lw=5, label=label, **self.kw_post1d_plot)
+
     def plot_data_model(self, plot_true_ybar=True):
         fig, ax = plt.subplots(2, 1, figsize=(7,7), sharex=True)
         # plot data
-        ax[0].plot(self.data.lmd, self.data.y, '.', ms=1, label='data')
+        ax[0].plot(self.data.lmd,
+                   self.data.y,
+                   label='data',
+                   **self.kw_data_plot)
         # plot P(\bar{y} | y)
-        y_rec_smp = np.dot(self.modgrid.X, self.beta_smp.T)
-        y_rec_lims = np.percentile(y_rec_smp, self.pc_even_tailed, axis=1)
-        ax[0].plot(self.data.lmd, y_rec_lims.T, color='C1')
-        for i in range(self.n_pc):
+        y_rec_smp = np.dot(self.modgrid.X, self.beta_smp.x.T).T
+        y_rec_smp = Samples(y_rec_smp)
+        y_rec_bcis = y_rec_smp.__getattribute__(self.get_bcis)(self.p_in)
+        for i in range(self.n_bcis):
             ax[0].fill_between(self.data.lmd,
-                               y_rec_lims[0,:],
-                               y_rec_lims[3,:],
-                               color='C1',
-                               alpha=0.3)
-            ax[0].fill_between(self.data.lmd,
-                               y_rec_lims[1,:],
-                               y_rec_lims[2,:],
-                               color='C1',
-                               alpha=0.3)
-        ax[0].plot([], [], lw=5, alpha=0.5, color='C1', label='$model$')
+                               y_rec_bcis[i, 0, :],
+                               y_rec_bcis[i, 1, :],
+                               **self.kw_post1d_plot)
+        self.plot_dummy_model1d(ax=ax[0], label='model')
         # plot truth
         if plot_true_ybar:
             if hasattr(self.data, 'ybar'):
                 ax[0].plot(self.data.lmd,
                            self.data.ybar,
-                           '-k',
-                           label='true')
+                           label='true',
+                           **self.kw_true_plot)
         # plot residuals relative to median recovered ybar
-        y_rec_med = np.percentile(y_rec_smp, 50., axis=1)
-        ax[1].plot(self.data.lmd, self.data.y - y_rec_med, '.', ms=3)
-        ax[1].fill_between(self.data.lmd,
-                           y_rec_lims[0,:] - y_rec_med,
-                           y_rec_lims[3,:] - y_rec_med,
-                           color='C1',
-                           alpha=0.3)
-        ax[1].fill_between(self.data.lmd,
-                           y_rec_lims[1,:] - y_rec_med,
-                           y_rec_lims[2,:] - y_rec_med,
-                           color='C1',
-                           alpha=0.3)
-        ax[1].plot(self.data.lmd, (y_rec_lims  - y_rec_med).T, color='C1')
-        ax[1].plot(self.data.lmd, self.data.ybar - y_rec_med, '-k')
+        y_rec_med = y_rec_smp.get_median()
+        ax[1].plot(self.data.lmd,
+                   self.data.y - y_rec_med,
+                   **self.kw_data_plot)
+        for i in range(self.n_bcis):
+            ax[1].fill_between(self.data.lmd,
+                               y_rec_bcis[i, 0, :] - y_rec_med,
+                               y_rec_bcis[i, 1, :] - y_rec_med,
+                               **self.kw_post1d_plot)
+        ax[1].plot(self.data.lmd,
+                   self.data.ybar - y_rec_med,
+                   **self.kw_true_plot)
         # format
         ax[0].legend()
         ax[0].set_ylabel('Data')
@@ -170,64 +226,214 @@ class Plotter:
         fig.tight_layout()
         fig.subplots_adjust(hspace=0)
 
-    def plot_df(self, plot_true_df=True, cmap_df=plt.cm.viridis):
-
-        if self.modgrid.npars==1:
-            if plot_true_df:
-                fig, ax = plt.subplots(2, 1, figsize=(7,7), sharex=True)
-            else:
-                fig, ax0 = plt.subplots(1, 1, figsize=(7,3.5), sharex=True)
-                ax = [ax0]
-            beta_lims = np.percentile(self.beta_smp,
-                                      self.pc_even_tailed,
-                                      axis=0)
+    def plot_df_1d(self,
+                   plot_true=True):
+        if self.modgrid.npars!=1:
+            raise ValueError('Model not 1D')
+        if plot_true:
+            # plot truth, posterior + residuals below
+            fig, ax = plt.subplots(2, 1, figsize=(7,7), sharex=True)
+        else:
+            # plot posterior
+            fig, ax0 = plt.subplots(1, 1, figsize=(7,3.5), sharex=True)
+            ax = [ax0]
+        beta_bcis = self.beta_smp.__getattribute__(self.get_bcis)(self.p_in)
+        for i in range(self.n_bcis):
             ax[0].fill_between(self.modgrid.par_cents[0],
-                               beta_lims[1,:],
-                               beta_lims[2,:],
-                               color='C1',
-                               alpha=0.3)
-            ax[0].fill_between(self.modgrid.par_cents[0],
-                               beta_lims[0,:],
-                               beta_lims[3,:],
-                               color='C1',
-                               alpha=0.3)
-            ax[0].plot([], [], lw=5, alpha=0.5, color='C1', label='$model$')
-            if plot_true_df:
-                ax[0].plot(self.modgrid.par_cents[0],
-                           self.df.F,
-                           '-k',
-                           label='true')
-                beta_med = np.percentile(self.beta_smp, 50, axis=0)
-                ax[1].plot(self.modgrid.par_cents[0],
-                           self.df.F - beta_med,
-                           '-k')
+                               beta_bcis[i, 0, :],
+                               beta_bcis[i, 1, :],
+                               **self.kw_post1d_plot)
+        self.plot_dummy_model1d(ax=ax[0], label='model')
+        if plot_true:
+            ax[0].plot(self.modgrid.par_cents[0],
+                       self.df.F,
+                       label='true',
+                       **self.kw_true_plot)
+            beta_med = self.beta_smp.median()
+            ax[1].plot(self.modgrid.par_cents[0],
+                       self.df.F - beta_med,
+                       '-k')
+            for i in range(self.n_bcis):
                 ax[1].fill_between(self.modgrid.par_cents[0],
-                                   beta_lims[1,:] - beta_med,
-                                   beta_lims[2,:] - beta_med,
-                                   color='C1',
-                                   alpha=0.3)
-                ax[1].fill_between(self.modgrid.par_cents[0],
-                                   beta_lims[0,:] - beta_med,
-                                   beta_lims[3,:] - beta_med,
-                                   color='C1',
-                                   alpha=0.3)
-            ax[0].legend()
-            ax[0].set_ylabel('Distribution Function')
-            if plot_true_df:
-                ax[1].set_ylabel('Residuals')
-                ax[1].set_xlabel(self.modgrid.par_pltsym[0])
+                                   beta_bcis[i, 0, :] - beta_med,
+                                   beta_bcis[i, 1, :] - beta_med,
+                                   **self.kw_post1d_plot)
+        ax[0].legend()
+        ax[0].set_ylabel('Distribution Function')
+        if plot_true:
+            ax[1].set_ylabel('Residuals')
+            ax[1].set_xlabel(self.modgrid.par_pltsym[0])
+        else:
+            ax[0].set_xlabel(self.modgrid.par_pltsym[0])
+        fig.tight_layout()
+        fig.subplots_adjust(hspace=0)
+
+    def plot_df_2d(self,
+                   plot_true=True,
+                   plot_posterior=True,
+                   posterior_view='median',
+                   df_colorscale='true',
+                   resid_type='significance',
+                   resid_nsmp_min=30):
+        """Plot 2D distribution functions as images
+
+        Parameters
+        ----------
+        plot_true : Boolean
+            whether to plot the true distribution function
+        plot_posterior : Boolean
+            whether to plot the posterior of the distribution function
+        posterior_view : string
+            how to plot the posterior, choices:
+            1) median
+            2) mode
+            3) MAP
+        df_colorscale : string
+            when plotting true and posterior of the DF, scale colorbar to:
+            1) 'truth' i.e. min/max of the true distribution
+            2) 'posterior' i.e. min/max of the posterior_view
+            3) 'joint' i.e. joint min/max of the true/posterior_view
+        resid_type : string, one of:
+            1) 'diff' raw differences between posterior view and truth
+            2) 'RMSE_normed' - differences normalised by RMSE i.e. root mean
+			squared error (relative to central panel)
+            3) 'MAD_normed' - differences normalised by MAD i.e. median absolute
+			deviation (relative to central panel)
+            4) 'significance' - in gaussian sigma
+        resid_nsmp_min : int
+            if resid_type='significance', this is minimum number of samples to
+            consider when calculting significances (see Samples class)
+        """
+        if self.modgrid.npars!=2:
+            raise ValueError('Model not 2D')
+        # make figure
+        if (plot_true and plot_posterior):
+            # plot truth, posterior, residuals
+            fig, ax = plt.subplots(1, 3,
+                                   figsize=(7.5, 3.5),
+                                   sharey=True)
+        elif (plot_true or plot_posterior):
+            # plot either truth or posterior
+            fig, ax0 = plt.subplots(1, 1, figsize=(3, 3.5), sharex=True)
+            ax = [ax0]
+        else:
+            raise ValueError('One of plot_true or plot_posterior must be True')
+        # get posterior image
+        if plot_posterior:
+            if posterior_view=='median':
+                post_view = self.beta_smp.get_median()
+                title = 'median model'
+            elif posterior_view=='mode':
+                post_view = self.beta_smp.get_halfsample_mode()
+                title = 'modal model'
+            elif posterior_view=='MAP':
+                post_view = self.beta_smp.get_MAP()
+                title = 'MAP model'
             else:
-                ax[0].set_xlabel(self.modgrid.par_pltsym[0])
-            fig.tight_layout()
-            fig.subplots_adjust(hspace=0)
+                raise ValueError('Unknown posterior_view')
+        # get colorlims
+        if df_colorscale=='true':
+            vmin, vmax = np.min(self.df.F), np.max(self.df.F)
+        elif df_colorscale=='posterior':
+            vmin, vmax = np.min(post_view), np.max(post_view)
+        elif df_colorscale=='joint':
+            vmin = np.min(np.concatenate((self.df.F.ravel(), post_view)))
+            vmax = np.max(np.concatenate((self.df.F.ravel(), post_view)))
+        else:
+            raise ValueError('Unknown df_colorscale')
+        if (plot_true and plot_posterior):
+            if resid_type=='diff':
+                resid_img = post_view - self.df.F.ravel()
+                cbar_lab = 'mod - true'
+            elif resid_type=='RMSE_normed':
+                resid_img = post_view - self.df.F.ravel()
+                squared_error = (post_view - self.beta_smp.x)**2.
+                mean_squared_error = np.mean(squared_error, axis=0)
+                rmse = np.sqrt(mean_squared_error)
+                resid_img /= rmse
+                cbar_lab = '(mod - true)/RMSE'
+            elif resid_type=='MAD_normed':
+                resid_img = post_view - self.df.F.ravel()
+                absolute_deviation = np.abs(post_view - self.beta_smp.x)
+                mad = np.median(absolute_deviation, axis=0)
+                resid_img /= mad
+                cbar_lab = '(mod - true)/MAD'
+            elif resid_type=='significance':
+                resid_img = self.beta_smp.gaussian_significances_1d(
+                            truth=self.df.F.ravel(),
+                            center=post_view,
+                            resid_nsmp_min=resid_nsmp_min)
+                cbar_lab = 'significance [$\\sigma$]'
+            else:
+                raise ValueError('Unknown resid_type')
+        # plot images
+        ax_cnt = 0
+        if plot_true:
+            # plot truth
+            imdf = ax[ax_cnt].imshow(self.df.F,
+                                     **self.kw_post2d_plot,
+                                     vmin=vmin,
+                                     vmax=vmax)
+            ax[ax_cnt].set_title('true')
+            ax_cnt += 1
+        if plot_true:
+            post_view = self.modgrid.reshape_beta(post_view)
+            imdf = ax[ax_cnt].imshow(post_view,
+                                     **self.kw_post2d_plot,
+                                     vmin=vmin,
+                                     vmax=vmax)
+            ax[ax_cnt].set_title(title)
+            ax_cnt += 1
+        if (plot_true and plot_posterior):
+            # plot residuals
+            resid_img = self.modgrid.reshape_beta(resid_img)
+            imres = ax[ax_cnt].imshow(resid_img,
+                                      **self.kw_resid_plot)
+            ax[ax_cnt].set_title('residuals')
+        # plot format
+        for ax0 in ax:
+            ax0.set_xlabel(self.modgrid.par_pltsym[1])
+        ax[0].set_ylabel(self.modgrid.par_pltsym[0])
+        fig.subplots_adjust(wspace=0)
+        fig.tight_layout()
+        # add colorbars
+        y0 = ax[0].get_position().y0 - 0.25
+        height = 0.05
+        if (plot_true and plot_posterior):
+            x0 = ax[0].get_position().x0
+            tmp = ax[1].get_position()
+            right = tmp.x0 + tmp.width
+            width = right - x0
+            cax_df = fig.add_axes([x0, y0, width, height])
+            tmp = ax[2].get_position()
+            x0 = tmp.x0
+            width = tmp.width
+            cax_resid = fig.add_axes([x0, y0, width, height])
+        else:
+            tmp = ax[0].get_position()
+            x0 = tmp.x0
+            width = tmp.width
+            cax_df = fig.add_axes([x0, y0, width, height])
+        cbdf = fig.colorbar(imdf, cax=cax_df, orientation='horizontal')
+        cbdf.set_label('weights')
+        if (plot_true and plot_posterior):
+            print(np.min(resid_img), np.max(resid_img))
+            cbres = fig.colorbar(imres,
+                                 cax=cax_resid,
+                                 orientation='horizontal',
+                                 extend='both',
+                                 ticks=(-3, 0, 3))
+            cbres.set_label(cbar_lab)
+        return
 
-        if self.modgrid.npars==2:
-
-            fig = plt.subplots(1, 3, figsize=(10.5, 3.5), sharey=True)
-
-            ax[0]
 
 
 
 
-            pass
+
+
+
+
+
+
+# end
