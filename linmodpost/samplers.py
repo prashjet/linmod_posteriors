@@ -13,9 +13,7 @@ class Samples:
     a specified fraction of samples, either:
         i) even-tailed interval
         ii) highest-density interval
-    4)
-
-
+    4) gaussian_significances_1d
     Parameters
     ----------
     x : array of (n_smp, smp_shape)
