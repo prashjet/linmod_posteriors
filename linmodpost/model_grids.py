@@ -28,12 +28,14 @@ class modelGrid:
         self.p = p
         self.min_n_p = np.min([n, p])
         self.X = self.get_X(self.lmd[:, np.newaxis], self.pars)
+        if normalise_models:
+            self.normalise()
 
     def add_constant(self, c):
         self.X += c
 
     def normalise(self):
-        self.X = self.X/self.delta_lmd/np.median(np.sum(self.X, 0))
+        self.X = self.X/self.delta_lmd/np.sum(self.X, 0)
 
     def check_par_input(self):
         check = (len(self.par_dims) == self.npars)
