@@ -350,7 +350,8 @@ class CholeskyTransformUnitNormal(PosteriorSampler):
     def unconstrained_sampler(self, n_smp):
         z = np.random.normal(0, 1, size=(self.pst_mean.size, n_smp))
         beta = self.pst_mean + np.dot(self.L, z).T
-        return beta
+        mnv = stats.multivariate_normal(mean=self.pst_mean, cov=self.pst_cov)
+        return beta, mnv.logpdf(beta)
 
 class Emcee(PosteriorSampler):
     pass
