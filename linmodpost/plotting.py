@@ -5,7 +5,7 @@ import matplotlib.colors as colors
 from matplotlib.collections import LineCollection
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from . samplers import Samples
+from . samples import Samples
 
 # set the colormap and centre the colorbar
 class MidpointNormalize(colors.Normalize):
@@ -62,7 +62,7 @@ class Plotter:
         self.kw_true_plot.update(kw_true_plot)
         self.kw_post1d_plot = {'color':'C1', 'alpha':0.3}
         self.kw_post1d_plot.update(kw_post1d_plot)
-        self.kw_post2d_plot={'cmap':plt.cm.cividis}
+        self.kw_post2d_plot={'cmap':plt.cm.cividis_r}
         self.kw_post2d_plot.update(kw_post2d_plot)
         # set aspect ratio for calls to imshow
         self.kw_resid_plot = self.kw_post2d_plot.copy()
@@ -199,7 +199,7 @@ class Plotter:
                            lw=6):
         ax.plot([], [], lw=5, label=label, **self.kw_post1d_plot)
 
-    def plot_data_model(self, plot_true_ybar=True):
+    def plot_data_model(self, plot_true=True):
         fig, ax = plt.subplots(2, 1, figsize=(7,7), sharex=True)
         # plot data
         ax[0].plot(self.data.lmd,
@@ -217,7 +217,7 @@ class Plotter:
                                **self.kw_post1d_plot)
         self.plot_dummy_model1d(ax=ax[0], label='model')
         # plot truth
-        if plot_true_ybar:
+        if plot_true:
             if hasattr(self.data, 'ybar'):
                 ax[0].plot(self.data.lmd,
                            self.data.ybar,
@@ -233,9 +233,11 @@ class Plotter:
                                y_rec_bcis[i, 0, :] - y_rec_med,
                                y_rec_bcis[i, 1, :] - y_rec_med,
                                **self.kw_post1d_plot)
-        ax[1].plot(self.data.lmd,
-                   self.data.ybar - y_rec_med,
-                   **self.kw_true_plot)
+        if plot_true:
+            if hasattr(self.data, 'ybar'):
+                ax[1].plot(self.data.lmd,
+                           self.data.ybar - y_rec_med,
+                           **self.kw_true_plot)
         # format
         ax[0].legend()
         ax[0].set_ylabel('Data')
