@@ -85,24 +85,150 @@ class Emcee(PosteriorSampler):
 
 class StanHMC(PosteriorSampler):
 
-    def bp_model(self, x):
-        return x**2
+    def __init__(self,
+                 beta_prior=None,
+                 pst_mean=None,
+                 pst_cov=None,
+                 pst_prec=None):
+        super().__init__(beta_prior=beta_prior,
+                         pst_mean=pst_mean,
+                         pst_cov=pst_cov,
+                         pst_prec=pst_prec)
+
+    def unconstrained_sampler(self, n_smp, n_chains):
+        stanmodfile = 'stanmods/hmc_unconstrained.pkl'
+        if os.path.isfile(stanmodfile):
+            model = pickle.load(open(stanmodfile, 'rb'))
+        else:
+            code = """
+            data {
+                int<lower=1> p;
+                vector[p] mu;
+                cov_matrix[p] Sigma;
+            }
+            parameters {
+                vector[p] beta;
+            }
+            model {
+                beta ~ multi_normal(mu, Sigma);
+            }
+            """
+            model = pystan.StanModel(model_code=code)
+            with open(stanmodfile, 'wb') as f:
+                pickle.dump(model, f)
+        data = {'p':len(self.pst_mean),
+                'mu':self.pst_mean,
+                'Sigma':self.pst_cov}
+        fit = model.sampling(data=data, iter=n_smp, chains=n_chains)
+        return fit['beta'], fit['lp__'], fit
+
+    def positive_sampler(self,
+                         iter=1000,
+                         chains=5,
+                         control={}):
+        stanmodfile = 'stanmods/hmc_positive.pkl'
+        if os.path.isfile(stanmodfile):
+            model = pickle.load(open(stanmodfile, 'rb'))
+        else:
+            code = """
+            data {
+                int<lower=1> p;
+                vector[p] mu;
+                cov_matrix[p] Sigma;
+            }
+            parameters {
+                vector<lower=0>[p] beta;
+            }
+            model {
+                beta ~ multi_normal(mu, Sigma);
+            }
+            """
+            model = pystan.StanModel(model_code=code)
+            with open(stanmodfile, 'wb') as f:
+                pickle.dump(model, f)
+        data = {'p':len(self.pst_mean),
+                'mu':self.pst_mean,
+                'Sigma':self.pst_cov}
+        fit = model.sampling(data=data,
+                             iter=iter,
+                             chains=chains,
+                             control=control)
+        return fit['beta'], fit['lp__'], fit
+
+
+class StanTMVN(PosteriorSampler):
 
     def __init__(self,
                  beta_prior=None,
-                 model_grid=None,
-                 data=None):
-        self.spx_bp_model = None
-        self.pos_bp_model = 3
-        self.idc_bp_model = None
-        self.dgc_bp_model = None
+                 pst_mean=None,
+                 pst_cov=None,
+                 pst_prec=None):
         super().__init__(beta_prior=beta_prior,
-                         model_grid=model_grid,
-                         data=data)
+                         pst_mean=pst_mean,
+                         pst_cov=pst_cov,
+                         pst_prec=pst_prec)
+        self.L = np.linalg.cholesky(self.pst_cov)
+
+    def positive_sampler(self,
+                         iter=1000,
+                         chains=5,
+                         control={}):
+        stanmodfile = 'stanmods/tMVN.pkl'
+        if os.path.isfile(stanmodfile):
+            model = pickle.load(open(stanmodfile, 'rb'))
+        else:
+            stancodefile = 'stanmods/tMVN.txt'
+            code = open(stancodefile, "r").read()
+            model = pystan.StanModel(model_code=code)
+            with open(stanmodfile, 'wb') as f:
+                pickle.dump(model, f)
+        data = {'K':self.beta_prior.p,
+                'b':np.zeros(self.beta_prior.p),
+                's':np.zeros(self.beta_prior.p)+1,
+                'mu':self.pst_mean,
+                'L':self.L}
+        fit = model.sampling(data=data,
+                             iter=iter,
+                             chains=chains,
+                             control=control)
+        return fit['y'], fit['lp__'], fit
+
 
 
 class StanGibbs(PosteriorSampler):
-    pass
+
+    def __init__(self,
+                 beta_prior=None,
+                 pst_mean=None,
+                 pst_cov=None,
+                 pst_prec=None):
+        super().__init__(beta_prior=beta_prior,
+                         pst_mean=pst_mean,
+                         pst_cov=pst_cov,
+                         pst_prec=pst_prec)
+        self.L = np.linalg.cholesky(self.pst_cov)
+
+    def positive_sampler(self,
+                         iter=1000,
+                         chains=5,
+                         control={}):
+        stanmodfile = 'stanmods/gibbs_positive.pkl'
+        if os.path.isfile(stanmodfile):
+            model = pickle.load(open(stanmodfile, 'rb'))
+        else:
+            stancodefile = 'stanmods/gibbs_positive.txt'
+            code = open(stancodefile, "r").read()
+            model = pystan.StanModel(model_code=code)
+            with open(stanmodfile, 'wb') as f:
+                pickle.dump(model, f)
+        data = {'p':len(self.pst_mean),
+                'mu':self.pst_mean,
+                'L':self.L}
+        fit = model.sampling(data=data,
+                             iter=iter,
+                             chains=chains,
+                             control=control)
+        return fit['beta'], fit['lp__'], fit
 
 
 class ExactHMC_R(PosteriorSampler):
