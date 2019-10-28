@@ -33,6 +33,7 @@ class BayesianLinearModel:
             self.cov = cov
             self.cov_inv = np.linalg.inv(cov)
         self.get_poterior_cov()
+        self.get_b()        
         self.get_poterior_mean()
 
     def get_poterior_cov(self):
@@ -48,11 +49,7 @@ class BayesianLinearModel:
         cov_n_inv = c1 + c2
         self.cov_n_inv = cov_n_inv
 
-    def get_poterior_mean(self):
-        """Get posterior mean mu_n by solving the OLS problem A mu_n = b, where:
-        A = cov_n_inv
-        b = X.T cov_inv y + sig_0^-2 mu_0
-        """
+    def get_b(self):
         if self.has_sig:
             b1 = self.sig**-2. * np.dot(self.X.T, self.y)
         else:
@@ -63,7 +60,14 @@ class BayesianLinearModel:
                            optimize=True)
         b2 = self.sig_0**-2 * self.mu_0*np.ones(self.p)
         b = b1 + b2
-        mu_n, _, _, _ = np.linalg.lstsq(self.cov_n_inv, b, rcond=None)
+        self.b = b
+
+    def get_poterior_mean(self):
+        """Get posterior mean mu_n by solving the OLS problem A mu_n = b, where:
+        A = cov_n_inv
+        b = X.T cov_inv y + sig_0^-2 mu_0
+        """
+        mu_n, _, _, _ = np.linalg.lstsq(self.cov_n_inv, self.b, rcond=None)
         self.mu_n = mu_n
 
 class Projector:
