@@ -51,9 +51,13 @@ class MockData(Data):
                 raise ValueError(errmsg)
             cov00 = cov
         self.ybar = np.dot(model_grid.X, df.beta)
-        mvn = stats.multivariate_normal(mean=np.zeros(model_grid.n),
-                                        cov=cov00)
-        y = self.ybar + mvn.rvs()
+        if sig is not None:
+            eps = np.random.normal(loc=0, scale=sig, size=model_grid.n)
+        else:
+            mvn = stats.multivariate_normal(mean=np.zeros(model_grid.n),
+                                            cov=cov00)
+            eps = mvn.rvs()
+        y = self.ybar + eps
         if sig is not None:
             super().__init__(lmd=model_grid.lmd,
                              y=y,
