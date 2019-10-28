@@ -1,6 +1,9 @@
 import numpy as np
 from scipy import stats
+from scipy.interpolate import interp1d
+
 import matplotlib.pyplot as plt
+from read_miles import read_miles
 
 class modelGrid:
 
@@ -12,7 +15,8 @@ class modelGrid:
                  par_dims,
                  par_lims,
                  par_mask_function,
-                 normalise_models):
+                 normalise_models,
+                 X=None):
         self.n = n
         self.lmd_min = lmd_min
         self.lmd_max = lmd_max
@@ -27,7 +31,8 @@ class modelGrid:
         p = self.pars.shape[-1]
         self.p = p
         self.min_n_p = np.min([n, p])
-        self.X = self.get_X(self.lmd[:, np.newaxis], self.pars)
+        if X==None:
+            self.X = self.get_X(self.lmd[:, np.newaxis], self.pars)
         if normalise_models:
             self.normalise()
 
@@ -176,3 +181,163 @@ class Normal(modelGrid):
         logsig = pars[0, :]
         loc = pars[1, :]
         return stats.norm.pdf(lmd, loc=loc, scale=10.**logsig)
+
+class LineSpectrum(modelGrid):
+
+    def __init__(self,
+                 n=100,
+                 lmd_min=-3,
+                 lmd_max=3.,
+                 par_lims=((-1,1),),
+                 par_dims=(30,),
+                 par_mask_function=None,
+                 normalise_models=True,
+                 n_lines=5,
+                 sig_lines=0.1,
+                 mu_lines=None,
+                 s0=None,
+                 s1=None,
+                 s2=None):
+        npars = 1
+        s = ("1) z, controls relative line strengths\n")
+        self.par_string = s
+        pltsym = ['$z$']
+        self.par_pltsym = pltsym
+        self.n_lines = n_lines
+        self.sig_lines = sig_lines
+        if mu_lines is None:
+            self.mu_lines = np.random.uniform(lmd_min, lmd_max, n_lines)
+        else:
+            self.mu_lines = np.array(mu_lines)
+        if s0 is None:
+            self.s0 = np.random.uniform(-1, 1, n_lines)
+        else:
+            self.s0 = np.array(s0)
+        if s1 is None:
+            self.s1 = np.random.uniform(-1, 1, n_lines)
+        else:
+            self.s1 = np.array(s1)
+        if s2 is None:
+            self.s2 = np.random.uniform(-1, 1, n_lines)
+        else:
+            self.s2 = np.array(s1)
+        super().__init__(n,
+                         lmd_min,
+                         lmd_max,
+                         npars,
+                         par_dims,
+                         par_lims,
+                         par_mask_function,
+                         normalise_models)
+
+    def get_linestrengths(self, z):
+        return self.s0 + self.s1*z + self.s2*z**2.
+
+    def get_X(self, lmd, pars):
+        z = pars[0, :]
+        nrm = stats.norm(loc=self.mu_lines, scale=self.sig_lines)
+        lmd = np.broadcast_to(lmd, (self.n_lines,)+lmd.shape )
+        lines = nrm.pdf(lmd.T)
+        s = self.get_linestrengths(z[:, np.newaxis, np.newaxis])
+        lines = lines * s
+        X = np.sum(lines, -1)
+        return X.T
+
+class ContinuumLineSpectrum(modelGrid):
+
+    def __init__(self,
+                 n=100,
+                 lmd_min=-3,
+                 lmd_max=3.,
+                 par_lims=((-1,1), (-1,1)),
+                 par_dims=(30, 20),
+                 par_mask_function=None,
+                 normalise_models=True,
+                 n_lines=5,
+                 sig_lines=0.1):
+        npars = 2
+        s = ("1) z, controls relative line strengths\n",
+             "2) c_slope, linear slope of the continuum")
+        self.par_string = s
+        pltsym = ['$z$', '$c_\mathrm{slope}$']
+        self.par_pltsym = pltsym
+        self.n_lines = n_lines
+        self.sig_lines = sig_lines
+        self.mu_lines = np.random.uniform(lmd_min, lmd_max, n_lines)
+        self.s0 = np.random.uniform(-1, 1, n_lines)
+        self.s1 = np.random.uniform(-1, 1, n_lines)
+        self.s2 = np.random.uniform(-1, 1, n_lines)
+        super().__init__(n,
+                         lmd_min,
+                         lmd_max,
+                         npars,
+                         par_dims,
+                         par_lims,
+                         par_mask_function,
+                         normalise_models)
+
+    def get_linestrengths(self, z):
+        return self.s0 + self.s1*z + self.s1*z**2.
+
+    def get_X(self, lmd, pars):
+        z = pars[0, :]
+        c_slope = pars[1, :]
+        self.c_slope = c_slope
+        nrm = stats.norm(loc=self.mu_lines, scale=self.sig_lines)
+        tmp = np.broadcast_to(lmd, (self.n_lines,)+lmd.shape)
+        lines = nrm.pdf(tmp.T)
+        strengths = self.get_linestrengths(z[:, np.newaxis, np.newaxis])
+        lines = lines * strengths
+        tmp = np.broadcast_to(lmd, (len(c_slope),)+lmd.shape)
+        continuum = (c_slope*(tmp**2.).T).T
+        continuum = np.squeeze(continuum)
+        X = continuum + np.sum(lines, -1)
+        return X.T
+
+class MilesSSP(modelGrid):
+
+    def __init__(self,
+                 miles_mod_directory='MILES_BASTI_CH_baseFe',
+                 n=1000,
+                 lmd_min=None,
+                 lmd_max=None,
+                 age_lim=None,
+                 z_lim=None):
+        ssps = read_miles.MilesSSPs(mod_dir=miles_mod_directory,
+                                    age_lim=age_lim,
+                                    z_lim=z_lim,
+                                    n_pixels=n)
+        ssps.interpolate_wavelength(n_pixels=n,
+                                    lmd_min=lmd_min,
+                                    lmd_max=lmd_max)
+        npars = 2
+        s = ("1) metallicity of stellar population",
+             "2) age of stellar population")
+        self.par_string = s
+        pltsym = ['$Z [M/H]$', 'T [Gyr]']
+        self.par_pltsym = pltsym
+        self.n = n
+        self.lmd_min = ssps.lmd[0]
+        self.lmd_max = ssps.lmd[-1]
+        self.lmd = ssps.lmd
+        self.delta_lmd = (self.lmd_max-self.lmd_min)/(n-1)
+        self.npars = 2
+        self.par_dims = (ssps.nz, ssps.nt)
+        self.par_lims = ((0,1),(0,1))
+        self.par_mask_function = None
+        self.check_par_input()
+        self.get_par_grid()
+        p = self.pars.shape[-1]
+        self.p = p
+        self.min_n_p = np.min([n, p])
+        self.X = ssps.X
+        # remaining pars from modgrid
+        self.override_ticks = True
+
+
+
+
+
+
+
+# end
