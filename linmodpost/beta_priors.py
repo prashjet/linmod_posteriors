@@ -1,5 +1,6 @@
 import numpy as np
-
+from scipy import stats
+import matplotlib.pyplot as plt
 
 class BetaPrior:
     """The prior on beta defined by
@@ -48,7 +49,6 @@ class BetaPrior:
             else:
                 self.g = g
 
-
 class UnconstrainedBetaPrior(BetaPrior):
 
     def __init__(self,
@@ -84,6 +84,27 @@ class PositiveBetaPrior(IdentityConstrainedBetaPrior):
                          n_ineq_constraints=n_ineq_constraints,
                          F=F,
                          g=g)
+
+    # def plot(self):
+    #     mvn = stats.multivariate_normal(mean=np.zeros(self.p)+self.mu_0,
+    #                                     cov=self.sig_0**2.*np.identity(self.p))
+    #     fig, ax = plt.subplots(1, 1)
+    #     n_smp = 100
+    #     # plot pdf from origin to (0,...0,1,0,...,0)
+    #     beta0 = np.linspace(0, 1, n_smp)
+    #     beta = np.zeros((self.p, n_smp))
+    #     beta[0, :] = beta0
+    #     ax.plot(beta0, mvn.logpdf(beta.T), '-r')
+    #     # plot pdf from origin to (1/p, ..., 1/p)
+    #     beta0 = np.linspace(0, 1./self.p, n_smp)
+    #     beta = np.ones((self.p, n_smp))
+    #     beta *= beta0
+    #     ax.plot(beta0, mvn.logpdf(beta.T), '--k')
+    #     # plot pdf from origin to (1/p, ..., 1/p) to (0,...0,1,0,...,0)
+    #     z = np.linspace(0, 1, n_smp)
+    #     beta0 = np.ones(self.p)*1./self.p
+    #     beta1 = np.zeros(self.p)
+    #     beta1[0] = 1.
 
 
 class SimplexBetaPrior(PositiveBetaPrior):
