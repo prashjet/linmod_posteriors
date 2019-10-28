@@ -1,0 +1,32 @@
+functions {
+  vector[] make_stuff(vector mu, matrix L, vector u) {
+    int p = rows(mu); vector[p] d; vector[p] z; vector[p] out[2];
+    for (k in 1:p) {
+      int km1 = k - 1;
+      real z_star = (-(mu[k] + ((k > 1) ? L[k,1:km1] * head(z, km1) : 0))) /
+                    L[k,k];
+      real v; real u_star = Phi(z_star);
+      d[k] = 1 - u_star;
+      v = u_star + d[k] * u[k];
+      z[k] = inv_Phi(v);
+    }
+    out[1] = z;
+    out[2] = d;
+    return out;
+  }
+}
+data {
+  int<lower=2> p;             // number of dimensions
+  vector[p] mu;
+  cholesky_factor_cov[p,p] L;
+}
+parameters {
+  vector<lower=0,upper=1>[p] u;
+}
+model {
+  target += log(make_stuff(mu, L, u)[2]); // Jacobian adjustments
+  // implicit: u ~ uniform(0,1)
+}
+generated quantities {
+  vector[p] beta = mu + L * make_stuff(mu, L, u)[1];
+}
