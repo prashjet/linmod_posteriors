@@ -14,8 +14,14 @@ class PosteriorSampler:
                  pst_prec=None):
         self.beta_prior = beta_prior
         self.pst_mean = pst_mean
-        self.pst_cov = pst_cov
-        self.pst_prec = pst_prec
+        if (pst_cov is None) + (pst_prec is None) != 1:
+            raise ValueError('Eaxcatly one of pst_cov/pst_prec must be set')
+        if pst_prec is None:
+            self.pst_cov = pst_cov
+        if pst_cov is None:
+            self.pst_prec = pst_prec
+            self.pst_cov = np.linalg.inv(pst_prec)
+            # ^----- can we use something else to invert posdef matrix?
         if hasattr(self, 'simplex_sampler') is False:
             self.simplex_sampler=None
         elif hasattr(self, 'positive_sampler') is False:
@@ -47,7 +53,6 @@ class PosteriorSampler:
             raise ValueError("beta_prior is wrong")
         self.sampler = sampler
 
-
 class CholeskyTransformUnitNormal(PosteriorSampler):
 
     def __init__(self,
@@ -67,14 +72,12 @@ class CholeskyTransformUnitNormal(PosteriorSampler):
         # http://scipy.github.io/old-wiki/pages/Cookbook/F2Py.html
         self.Tinv = np.linalg.inv(self.T)
         self.L = self.Tinv.T
-        if self.pst_cov is None:
-            self.pst_cov = np.linalg.inv(self.pst_prec)
 
     def unconstrained_sampler(self, n_smp):
         z = np.random.normal(0, 1, size=(self.pst_mean.size, n_smp))
         beta = self.pst_mean + np.dot(self.L, z).T
         mnv = stats.multivariate_normal(mean=self.pst_mean, cov=self.pst_cov)
-        return beta, mnv.logpdf(beta)
+        return beta, mnv.logpdf(beta), None
 
 class Emcee(PosteriorSampler):
     pass
