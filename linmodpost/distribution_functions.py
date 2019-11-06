@@ -16,7 +16,10 @@ class DistributionFunction:
         self.F = np.zeros(self.shape)
         xarr = []
         for n_p in self.shape:
-            xarr += [np.arange(n_p)/(n_p-1.)]
+            if n_p>1:
+                xarr += [np.arange(n_p)/(n_p-1.)]
+            elif n_p==1:
+                xarr += [np.array([0.5])]
         xarr = np.meshgrid(*xarr, indexing='ij')
         xarr = np.array(xarr)
         self.xarr = xarr
