@@ -302,11 +302,15 @@ class MilesSSP(modelGrid):
                  lmd_min=None,
                  lmd_max=None,
                  age_lim=None,
-                 z_lim=None):
+                 z_lim=None,
+                 thin_age=1,
+                 thin_z=1):
         ssps = read_miles.MilesSSPs(mod_dir=miles_mod_directory,
                                     age_lim=age_lim,
                                     z_lim=z_lim,
-                                    n_pixels=n)
+                                    n_pixels=n,
+                                    thin_age=thin_age,
+                                    thin_z=thin_z)
         ssps.interpolate_wavelength(n_pixels=n,
                                     lmd_min=lmd_min,
                                     lmd_max=lmd_max)
@@ -333,9 +337,6 @@ class MilesSSP(modelGrid):
         self.X = ssps.X
         # remaining pars from modgrid
         self.override_ticks = True
-
-
-
 
 
 
