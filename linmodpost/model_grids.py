@@ -35,6 +35,7 @@ class modelGrid:
             self.X = self.get_X(self.lmd[:, np.newaxis], self.pars)
         if normalise_models:
             self.normalise()
+        self.override_ticks = False
 
     def add_constant(self, c):
         self.X += c
@@ -294,31 +295,69 @@ class ContinuumLineSpectrum(modelGrid):
         X = continuum + np.sum(lines, -1)
         return X.T
 
+class CenteredNormalVarSigmaFlux(modelGrid):
+
+    def __init__(self,
+                 n=300,
+                 lmd_min=-3,
+                 lmd_max=3.,
+                 par_lims=((0,1),(-5,0)),
+                 par_dims=(30,50),
+                 par_mask_function=None,
+                 normalise_models=True):
+        npars = 2
+        s = ("1) $\\alpha$ = line flux",
+             "2) $\\beta$ =  log($\\sigma^2$)")
+        self.par_string = s
+        pltsym = ['$\\alpha$', '$\\beta$']
+        self.par_pltsym = pltsym
+        super().__init__(n,
+                         lmd_min,
+                         lmd_max,
+                         npars,
+                         par_dims,
+                         par_lims,
+                         par_mask_function,
+                         normalise_models)
+
+    def get_X(self, lmd, pars):
+        alpha = pars[0, :]
+        beta = pars[1, :]
+        dlmd = self.delta_lmd
+        N = stats.norm(loc=0., scale=np.exp(beta)**0.5)
+        line = N.cdf(lmd+dlmd/2.) - N.cdf(lmd-dlmd/2.)
+        return alpha * line
+
 class MilesSSP(modelGrid):
 
     def __init__(self,
                  miles_mod_directory='MILES_BASTI_CH_baseFe',
-                 n=1000,
+                 n=None,
                  lmd_min=None,
                  lmd_max=None,
                  age_lim=None,
                  z_lim=None,
                  thin_age=1,
-                 thin_z=1):
+                 thin_z=1,
+                 normalise_models=True):
+
         ssps = read_miles.MilesSSPs(mod_dir=miles_mod_directory,
                                     age_lim=age_lim,
                                     z_lim=z_lim,
-                                    n_pixels=n,
                                     thin_age=thin_age,
                                     thin_z=thin_z)
-        ssps.interpolate_wavelength(n_pixels=n,
-                                    lmd_min=lmd_min,
-                                    lmd_max=lmd_max)
+        if n is None:
+            n = ssps.X.shape[0]
+        else:
+            ssps.interpolate_wavelength(n_pixels=n,
+                                        lmd_min=lmd_min,
+                                        lmd_max=lmd_max)
+        self.ssps = ssps
         npars = 2
         s = ("1) metallicity of stellar population",
              "2) age of stellar population")
         self.par_string = s
-        pltsym = ['$Z [M/H]$', 'T [Gyr]']
+        pltsym = ['Z [M/H]', 'Age [Gyr]']
         self.par_pltsym = pltsym
         self.n = n
         self.lmd_min = ssps.lmd[0]
@@ -336,8 +375,36 @@ class MilesSSP(modelGrid):
         self.min_n_p = np.min([n, p])
         self.X = ssps.X
         # remaining pars from modgrid
-        self.override_ticks = True
+        if normalise_models:
+            self.normalise()
+        self.override_ticks = False
 
+    def set_tick_parameters(self,
+                            n_z_ticks=5,
+                            n_t_ticks=5,
+                            n_round=2):
+        # set parameters for adding custom tickmarks on plots
+        self.override_ticks = True
+        # z ticks
+        fill_value = (np.min(self.ssps.z_unq), np.max(self.ssps.z_unq))
+        self.y_ticks = np.linspace(0, 1, n_z_ticks)
+        interpolator = interp1d(self.par_cents[0],
+                                self.ssps.z_unq,
+                                bounds_error=False,
+                                fill_value=fill_value)
+        y_tick_labs = interpolator(self.y_ticks)
+        y_tick_labs = np.round(y_tick_labs, n_round)
+        self.y_tick_labs = y_tick_labs
+        # t ticks
+        fill_value = (np.min(self.ssps.t_unq), np.max(self.ssps.t_unq))
+        self.x_ticks = np.linspace(0, 1, n_t_ticks)
+        interpolator = interp1d(self.par_cents[1],
+                                self.ssps.t_unq,
+                                bounds_error=False,
+                                fill_value=fill_value)
+        x_tick_labs = interpolator(self.x_ticks)
+        x_tick_labs = np.round(x_tick_labs, n_round)
+        self.x_tick_labs = x_tick_labs
 
 
 
