@@ -1,6 +1,7 @@
 import numpy as np
 from scipy import stats
 from scipy.linalg import orth as scipy_linalg_orth
+from sklearn import decomposition
 import matplotlib.pyplot as plt
 
 class Projector:
@@ -223,9 +224,12 @@ class SVD(MatrixFactorisor):
 
     def factorise(self, q):
         self.q = q
-        self.Z = np.dot(self.svd_u[:, 0:q],
-                        np.diag(self.svd_s[0:q]))
-        self.W = self.svd_vt[0:q, :].T
+        # self.Z = np.dot(self.svd_u[:, 0:q],
+        #                 np.diag(self.svd_s[0:q]))
+        # self.W = self.svd_vt[0:q, :].T
+        self.Z = self.svd_u[:, 0:q]
+        self.W = np.dot(np.diag(self.svd_s[0:q]),
+                        self.svd_vt[0:q, :]).T
 
     def get_V(self):
         self.V = self.svd_vt[self.q:, :].T
