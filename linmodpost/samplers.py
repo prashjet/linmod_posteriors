@@ -5,6 +5,14 @@ import os
 import pickle
 import pystan
 
+from rpy2 import robjects
+from rpy2.robjects.packages import importr
+utils = importr('utils')
+# utils.install_packages('tmvnsim')
+tmvnsim = importr('tmvnsim')
+#utils.install_packages('tmg')
+tmg = importr('tmg')
+
 class PosteriorSampler:
 
     def __init__(self,
@@ -79,9 +87,6 @@ class CholeskyTransformUnitNormal(PosteriorSampler):
         mnv = stats.multivariate_normal(mean=self.pst_mean, cov=self.pst_cov)
         return beta, mnv.logpdf(beta), None
 
-class Emcee(PosteriorSampler):
-    pass
-
 
 class StanHMC(PosteriorSampler):
 
@@ -95,7 +100,10 @@ class StanHMC(PosteriorSampler):
                          pst_cov=pst_cov,
                          pst_prec=pst_prec)
 
-    def unconstrained_sampler(self, n_smp, n_chains):
+    def unconstrained_sampler(self,
+                              iter=1000,
+                              chains=5,
+                              control={}):
         stanmodfile = 'stanmods/hmc_unconstrained.pkl'
         if os.path.isfile(stanmodfile):
             model = pickle.load(open(stanmodfile, 'rb'))
@@ -119,7 +127,7 @@ class StanHMC(PosteriorSampler):
         data = {'p':len(self.pst_mean),
                 'mu':self.pst_mean,
                 'Sigma':self.pst_cov}
-        fit = model.sampling(data=data, iter=n_smp, chains=n_chains)
+        fit = model.sampling(data=data, iter=iter, chains=chains)
         return fit['beta'], fit['lp__'], fit
 
     def positive_sampler(self,
@@ -194,8 +202,7 @@ class StanTMVN(PosteriorSampler):
         return fit['y'], fit['lp__'], fit
 
 
-
-class StanGibbs(PosteriorSampler):
+class StanGHK(PosteriorSampler):
 
     def __init__(self,
                  beta_prior=None,
@@ -231,9 +238,70 @@ class StanGibbs(PosteriorSampler):
         return fit['beta'], fit['lp__'], fit
 
 
-class ExactHMC_R(PosteriorSampler):
-    pass
+class ExactHMC(PosteriorSampler):
+
+    def __init__(self,
+                 beta_prior=None,
+                 pst_mean=None,
+                 pst_cov=None,
+                 pst_prec=None):
+        super().__init__(beta_prior=beta_prior,
+                         pst_mean=pst_mean,
+                         pst_cov=pst_cov,
+                         pst_prec=pst_prec)
+
+    def wrap_tmg(self,
+                 n=1000,
+                 precision=None,
+                 covariance=None,
+                 mean=None,
+                 initial=None,
+                 f=None,
+                 g=None,
+                 q=None,
+                 burn_in=100):
+        if (precision is None) + (covariance is None) != 1:
+            raise ValueError('Exactly one of precision or covariance must be set')
+        if precision is None:
+            precision = np.linalg.inv(covariance)
+        d = precision.shape[0]
+        M = robjects.FloatVector(precision.ravel())
+        M = robjects.r['matrix'](M, nrow=d)
+        if mean is None:
+            mean = np.zeros(d)
+        r = np.dot(precision, mean)
+        r = robjects.FloatVector(r)
+        if initial is None:
+            initial = np.zeros(d) + 1e-5
+        initial = robjects.FloatVector(initial)
+        if f is None:
+            f = robjects.NULL
+        else:
+            f = robjects.FloatVector(f.ravel())
+            f = robjects.r['matrix'](f, nrow=d)
+        if g is None:
+            g = robjects.NULL
+        else:
+            g = robjects.FloatVector(g)
+        if q is None:
+            q = robjects.NULL
+        else:
+            q = robjects.ListVector(q)
+        kw_args = {'f':f, 'g':g, 'q':q, 'burn.in':burn_in}
+        result = tmg.rtmg(n, M, r, initial, **kw_args)
+        return np.array(result)
+
+    def positive_sampler(self, nsamp=1000, init=1e-5, burn_in=100):
+        k = len(self.pst_mean)
+        smp = self.wrap_tmg(n=nsamp,
+                            precision=self.pst_prec,
+                            mean=self.pst_mean,
+                            initial=np.ones(k)*init,
+                            f=np.identity(k),
+                            g=np.zeros(k),
+                            burn_in=burn_in)
+        return smp
 
 
-class ExactHMC_Python(PosteriorSampler):
-    pass
+
+# end

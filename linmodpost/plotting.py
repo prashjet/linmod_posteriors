@@ -62,7 +62,7 @@ class Plotter:
         self.kw_true_plot.update(kw_true_plot)
         self.kw_post1d_plot = {'color':'C1', 'alpha':0.3}
         self.kw_post1d_plot.update(kw_post1d_plot)
-        self.kw_post2d_plot={'cmap':plt.cm.cividis_r}
+        self.kw_post2d_plot={'cmap':plt.cm.cividis}
         self.kw_post2d_plot.update(kw_post2d_plot)
         # set aspect ratio for calls to imshow
         self.kw_resid_plot = self.kw_post2d_plot.copy()
@@ -73,6 +73,13 @@ class Plotter:
     def set_credible_interval_levels(self, p_in_credible_intervals):
         self.p_in = np.array(p_in_credible_intervals)
         self.n_bcis = len(p_in_credible_intervals)
+
+    def override_ticks(self, ax):
+        if self.modgrid.override_ticks:
+            ax.set_xticks(self.modgrid.x_ticks)
+            ax.set_xticklabels(self.modgrid.x_tick_labs)
+            ax.set_yticks(self.modgrid.y_ticks)
+            ax.set_yticklabels(self.modgrid.y_tick_labs)
 
     def configure_imshow(self,
                          imshow_aspect='square_pixels',
@@ -142,10 +149,10 @@ class Plotter:
         self.kw_mod_plot.update({'origin':'lower'})
         self.kw_resid_plot.update({'origin':'lower'})
 
-    def plot_modgrid(self):
+    def plot_modgrid(self, y_offset=0):
         # get colors
         models = self.modgrid.X.T
-        v = [np.array([self.modgrid.lmd, model]).T for model in models]
+        v = [np.array([self.modgrid.lmd, models[i]+i*y_offset]).T for i in range(self.modgrid.p)]
         cols = np.linspace(0, 1, self.modgrid.p)
         if self.modgrid.npars==1:
             mod_key_arr = np.array([cols])
@@ -165,8 +172,8 @@ class Plotter:
         miny, maxy = np.min(self.modgrid.X), np.max(self.modgrid.X)
         ax[0].set_xlim(minx, maxx)
         ax[0].set_ylim(miny, maxy)
-        ax[0].set_ylabel('Models')
-        ax[0].set_xlabel('$\lambda$')
+        ax[0].set_ylabel('Flux')
+        ax[0].set_xlabel('$\lambda$ [angstrom]')
         # format ax1
         if self.modgrid.npars==2:
             ax[1].set_xlabel(self.modgrid.par_pltsym[1])
@@ -174,7 +181,9 @@ class Plotter:
         else:
             ax[1].set_xlabel(self.modgrid.par_pltsym[0])
             ax[1].get_yaxis().set_visible(False)
+        self.override_ticks(ax[1])
         fig.tight_layout()
+        return
 
     def plot_data(self, plot_true_ybar=True):
         fig, ax = plt.subplots(1, 1, figsize=(7,3.5))
@@ -189,9 +198,10 @@ class Plotter:
         # format
         ax.legend()
         ax.set_ylabel('Data')
-        ax.set_xlabel('$\lambda$')
+        ax.set_xlabel('$\lambda$ [angstrom]')
         fig.tight_layout()
         fig.subplots_adjust(hspace=0)
+        return
 
     def plot_dummy_model1d(self,
                            ax=None,
@@ -242,9 +252,10 @@ class Plotter:
         ax[0].legend()
         ax[0].set_ylabel('Data')
         ax[1].set_ylabel('Residuals')
-        ax[1].set_xlabel('$\lambda$')
+        ax[1].set_xlabel('$\lambda$ [angstrom]')
         fig.tight_layout()
         fig.subplots_adjust(hspace=0)
+        return fig
 
     def plot_df_1d(self,
                    plot_true=True):
@@ -287,6 +298,7 @@ class Plotter:
             ax[0].set_xlabel(self.modgrid.par_pltsym[0])
         fig.tight_layout()
         fig.subplots_adjust(hspace=0)
+        return fig
 
     def plot_df_2d(self,
                    plot_true=True,
@@ -399,35 +411,38 @@ class Plotter:
                 cbar_lab = 'significance [$\\sigma$]'
             else:
                 raise ValueError('Unknown resid_type')
-        # get df colorlims
-        if resid_clim=='auto':
-            vlim = np.max(np.abs(resid_img))
-            self.kw_resid_plot['norm'].vmin = -vlim
-            self.kw_resid_plot['norm'].vmax = vlim
-        elif isinstance(resid_clim, (float,int)):
-            self.kw_resid_plot['norm'].vmin = -1.0001*resid_clim
-            self.kw_resid_plot['norm'].vmax = 1.0001*resid_clim
-        elif isinstance(resid_clim, (np.ndarray,list,tuple)):
-            self.kw_resid_plot['norm'].vmin = 1.0001*resid_clim[0]
-            self.kw_resid_plot['norm'].vmax = 1.0001*resid_clim[1]
-        else:
-            raise ValueError('Unknown resid_clim')
+        if plot_posterior and plot_true:
+            # get df colorlims
+            if resid_clim=='auto':
+                vlim = np.max(np.abs(resid_img))
+                self.kw_resid_plot['norm'].vmin = -vlim
+                self.kw_resid_plot['norm'].vmax = vlim
+            elif isinstance(resid_clim, (float,int)):
+                self.kw_resid_plot['norm'].vmin = -1.0001*resid_clim
+                self.kw_resid_plot['norm'].vmax = 1.0001*resid_clim
+            elif isinstance(resid_clim, (np.ndarray,list,tuple)):
+                self.kw_resid_plot['norm'].vmin = 1.0001*resid_clim[0]
+                self.kw_resid_plot['norm'].vmax = 1.0001*resid_clim[1]
+            else:
+                raise ValueError('Unknown resid_clim')
         # plot images
         ax_cnt = 0
         if plot_true:
             # plot truth
             imdf = ax[ax_cnt].imshow(self.df.F,
                                      **self.kw_post2d_plot,
-                                     vmin=vmin,
-                                     vmax=vmax)
+									 norm=colors.LogNorm(vmin=vmin, vmax=vmax))
+            imdf = ax[ax_cnt].imshow(self.df.F,
+                                     **self.kw_post2d_plot,
+									 norm=colors.LogNorm(vmin=vmin, vmax=vmax))
             ax[ax_cnt].set_title('true')
             ax_cnt += 1
         if plot_posterior:
             post_view = self.modgrid.reshape_beta(post_view)
+            post_view[post_view<=0] = np.min(post_view[post_view>0.])
             imdf = ax[ax_cnt].imshow(post_view,
                                      **self.kw_post2d_plot,
-                                     vmin=vmin,
-                                     vmax=vmax)
+									 norm=colors.LogNorm(vmin=vmin, vmax=vmax))
             ax[ax_cnt].set_title(title)
             ax_cnt += 1
         if (plot_true and plot_posterior):
@@ -439,6 +454,7 @@ class Plotter:
         # plot format
         for ax0 in ax:
             ax0.set_xlabel(self.modgrid.par_pltsym[1])
+            self.override_ticks(ax0)
         ax[0].set_ylabel(self.modgrid.par_pltsym[0])
         fig.subplots_adjust(wspace=0)
         fig.tight_layout()
@@ -469,9 +485,6 @@ class Plotter:
                                  extend='both')
             cbres.set_label(cbar_lab)
         return
-
-
-
 
 
 
