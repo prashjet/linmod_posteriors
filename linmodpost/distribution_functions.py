@@ -24,7 +24,9 @@ class DistributionFunction:
         xarr = np.array(xarr)
         self.xarr = xarr
         # fill DF
-        if fill_method=='uniform_random':
+        if fill_method=='constant':
+            self.fill_constant(**fill_pars)
+        elif fill_method=='uniform_random':
             self.fill_uniform_random(**fill_pars)
         elif fill_method=='gblob':
             self.fill_gblob(**fill_pars)
@@ -37,7 +39,7 @@ class DistributionFunction:
         # mask, normalise and flatten DF
         self.masker()
         self.normalise = normalise
-        if normalise:
+        if normalise is not False:
             self.normaliser()
         self.make_beta_vector()
 
@@ -46,10 +48,15 @@ class DistributionFunction:
 
     def normaliser(self):
         self.F /= np.sum(self.F)
+        if type(self.normalise) in [np.int, np.float]:
+            self.F *= self.normalise
 
     def make_beta_vector(self):
         idx = tuple([self.par_idx[i] for i in range(self.dim)])
         self.beta = self.F[idx]
+
+    def fill_constant(self, k):
+        self.F += k
 
     def fill_uniform_random(self, norm):
         self.F += np.random.uniform(0, norm, size=self.shape)
@@ -57,7 +64,7 @@ class DistributionFunction:
     def fill_gblob(self, norm, mu, cov):
         mvn = stats.multivariate_normal(mu, cov)
         pdf = mvn.pdf(self.xarr.reshape(self.dim, -1).T).T
-        self.F += pdf.reshape(self.shape)
+        self.F += norm*pdf.reshape(self.shape)
 
     def fill_random_gblob(self,
                           lognorm_lo=0,
